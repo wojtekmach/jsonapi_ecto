@@ -29,7 +29,6 @@ end
 defmodule Article do
   use Ecto.Schema
 
-  @primary_key {:id, :string, []}
   schema "articles" do
     field :title, :string
   end
