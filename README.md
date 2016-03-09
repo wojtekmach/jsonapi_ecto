@@ -2,6 +2,8 @@
 
 Talk to any JSON API compatible backend from Ecto.
 
+[See example](./test/jsonapi_ecto_test.exs)
+
 ## License
 
 The MIT License (MIT)
