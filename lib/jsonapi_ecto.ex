@@ -49,15 +49,23 @@ defmodule JSONAPI.Ecto do
   end
   defp process_item(item, included, [{:&, [], [0, field_names, _]}], preprocess) do
     fields = [{:&, [], [0, field_names, nil]}]
-    values = Enum.map(field_names -- [:id], fn field -> Map.fetch!(item["attributes"], Atom.to_string(field)) end)
-    values = [item["id"] | values]
+    values = extract_values(item, field_names)
 
     [preprocess.(hd(fields), values, nil) |> process_assocs(item, included)]
   end
   defp process_item(item, _included, exprs, preprocess) do
     Enum.map(exprs, fn {{:., [], [{:&, [], [0]}, field]}, _, []} ->
-      preprocess.(field, Map.fetch!(item, Atom.to_string(field)), nil)
+      if field == :id do
+        item["id"]
+      else
+        preprocess.(field, Map.fetch!(item["attributes"], Atom.to_string(field)), nil)
+      end
     end)
+  end
+
+  defp extract_values(item, field_names) do
+    values = Enum.map(field_names -- [:id], fn field -> Map.fetch!(item["attributes"], Atom.to_string(field)) end)
+    [item["id"] | values]
   end
 
   defp process_assocs(%{__struct__: struct} = schema, item, included) do

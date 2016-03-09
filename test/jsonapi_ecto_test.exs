@@ -87,4 +87,12 @@ defmodule JSONAPI.EctoTest do
     comments = [%Comment{body: "First!"}, %Comment{body: "I like XML better"}]
     assert [%Article{id: "1", title: "JSON API paints my bikeshed!", comments: ^comments}] = articles
   end
+
+  test "select some fields" do
+    articles =
+      from(a in Article, select: {a.id, a.title})
+      |> TestRepo.all(client: FakeClient)
+
+    assert articles == [{"1", "JSON API paints my bikeshed!"}]
+  end
 end
