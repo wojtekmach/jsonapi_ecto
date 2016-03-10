@@ -49,7 +49,7 @@ defmodule JSONAPI.Ecto do
   end
   defp process_item(item, included, [{:&, [], [0, field_names, _]}], preprocess) do
     fields = [{:&, [], [0, field_names, nil]}]
-    values = extract_values(item, field_names)
+    values = extract_values(item, included, field_names)
 
     [preprocess.(hd(fields), values, nil) |> process_assocs(item, included)]
   end
@@ -63,30 +63,52 @@ defmodule JSONAPI.Ecto do
     end)
   end
 
-  defp extract_values(item, field_names) do
-    values = Enum.map(field_names -- [:id], fn field -> Map.fetch!(item["attributes"], Atom.to_string(field)) end)
-    [item["id"] | values]
+  defp extract_values(item, _included, field_names) do
+    # FIXME: remove hardcoded author_id
+    field_names = field_names -- [:id, :author_id]
+    values = Enum.map(field_names, fn field -> Map.fetch!(item["attributes"], Atom.to_string(field)) end)
+    [item["id"] | values] ++ [""]
   end
 
   defp process_assocs(%{__struct__: struct} = schema, item, included) do
     Enum.map(struct.__schema__(:associations), fn assoc ->
-      queryable = struct.__schema__(:association, assoc).queryable
-      ids = item["relationships"]["#{assoc}"]["data"] |> Enum.map(& &1["id"])
+      case struct.__schema__(:association, assoc) do
+        %Ecto.Association.BelongsTo{} = info ->
+          queryable = info.queryable
+          id = item["relationships"]["#{assoc}"]["data"]["id"]
+          source = queryable.__schema__(:source)
+          item = find_in(included, source, id)
 
-      values =
-        Enum.map(ids, fn id ->
-          item = Enum.find(included, fn item -> item["type"] == "#{assoc}" && item["id"] == id end)
-          # TODO: whitelist attributes before String.to_atom
-          attributes = Enum.into(item["attributes"], %{}, fn {key, val} -> {String.to_atom(key), val} end)
-          
-          struct(queryable, attributes)
-        end)
+          attributes = extract_attributes(item)
+          attributes = Map.put(attributes, :id, id)
+          value = struct(queryable, attributes)
 
-      {assoc, values}
+          {assoc, value}
+        %Ecto.Association.Has{cardinality: :many} = info ->
+          queryable = info.queryable
+          ids = item["relationships"]["#{assoc}"]["data"] |> Enum.map(& &1["id"])
+
+          values =
+            Enum.map(ids, fn id ->
+              item = find_in(included, "#{assoc}", id)
+              struct(queryable, extract_attributes(item))
+            end)
+
+          {assoc, values}
+      end
     end)
     |> Enum.reduce(schema, fn({assoc, assoc_schema}, schema) ->
       Map.put(schema, assoc, assoc_schema)
     end)
+  end
+
+  defp find_in(included, type, id) do
+    Enum.find(included, fn item -> item["type"] == type && item["id"] == id end)
+  end
+
+  defp extract_attributes(item) do
+    # TODO: whitelist attributes before String.to_atom
+    Enum.into(item["attributes"], %{}, fn {key, val} -> {String.replace(key, "-", "_") |> String.to_atom, val} end)
   end
 
   ## Writes

@@ -15,6 +15,13 @@ defmodule FakeClient do
       "title": "JSON API paints my bikeshed!"
     },
     "relationships": {
+      "author": {
+        "links": {
+          "self": "http://example.com/articles/1/relationships/author",
+          "related": "http://example.com/articles/1/author"
+        },
+        "data": { "type": "people", "id": "9" }
+      },
       "comments": {
         "links": {
           "self": "http://example.com/articles/1/relationships/comments",
@@ -31,6 +38,14 @@ defmodule FakeClient do
     }
   }],
   "included": [{
+    "type": "people",
+    "id": "9",
+    "attributes": {
+      "first-name": "Dan",
+      "last-name": "Gebhardt",
+      "twitter": "dgeb"
+    }
+  }, {
     "type": "comments",
     "id": "5",
     "attributes": {
@@ -64,6 +79,7 @@ defmodule Article do
     field :title, :string
 
     has_many :comments, Comment
+    belongs_to :author, Person
   end
 end
 
@@ -72,6 +88,16 @@ defmodule Comment do
 
   schema "comments" do
     field :body, :string
+  end
+end
+
+defmodule Person do
+  use Ecto.Schema
+
+  schema "people" do
+    field :first_name, :string
+    field :last_name, :string
+    field :twitter, :string
   end
 end
 
@@ -84,8 +110,9 @@ defmodule JSONAPI.EctoTest do
       from(a in Article)
       |> TestRepo.all(client: FakeClient)
 
+    author = %Person{id: "9", first_name: "Dan", last_name: "Gebhardt", twitter: "dgeb"}
     comments = [%Comment{body: "First!"}, %Comment{body: "I like XML better"}]
-    assert [%Article{id: "1", title: "JSON API paints my bikeshed!", comments: ^comments}] = articles
+    assert [%Article{id: "1", title: "JSON API paints my bikeshed!", author: ^author, comments: ^comments}] = articles
   end
 
   test "select some fields" do
