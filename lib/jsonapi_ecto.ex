@@ -67,6 +67,7 @@ defmodule JSONAPI.Ecto do
     # FIXME: remove hardcoded author_id
     field_names = field_names -- [:id, :author_id]
     values = Enum.map(field_names, fn field -> Map.fetch!(item["attributes"], Atom.to_string(field)) end)
+    # FIXME: remove [""]
     [item["id"] | values] ++ [""]
   end
 
