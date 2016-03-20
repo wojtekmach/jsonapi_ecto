@@ -31,7 +31,7 @@ defmodule JSONAPI.Ecto do
 
   ## Reads
 
-  def execute(_repo, %{fields: fields} = _meta, {:nocache, {:all, query}}, [] = _params, preprocess, opts) do
+  def execute(_repo, %{fields: fields, sources: sources}, {:nocache, {:all, query}}, [] = _params, preprocess, opts) do
     client = opts[:client] || @client
     path = Get.new(query)
 
@@ -39,21 +39,21 @@ defmodule JSONAPI.Ecto do
     data = Map.fetch!(response, "data")
     included = Map.fetch!(response, "included")
 
-    items = Enum.map(data, fn item -> process_item(item, included, fields, preprocess) end)
+    items = Enum.map(data, fn item -> process_item(sources, item, included, fields, preprocess) end)
 
     {0, items}
   end
 
-  defp process_item(item, _included, [{:&, [], [0, nil, _]}], _preprocess) do
+  defp process_item(_sources, item, _included, [{:&, [], [0, nil, _]}], _preprocess) do
     [item]
   end
-  defp process_item(item, included, [{:&, [], [0, field_names, _]}], preprocess) do
+  defp process_item(sources, item, included, [{:&, [], [0, field_names, _]}], preprocess) do
     fields = [{:&, [], [0, field_names, nil]}]
-    values = extract_values(item, included, field_names)
+    values = extract_values(sources, item, included, field_names)
 
     [preprocess.(hd(fields), values, nil) |> process_assocs(item, included)]
   end
-  defp process_item(item, _included, exprs, preprocess) do
+  defp process_item(_sources, item, _included, exprs, preprocess) do
     Enum.map(exprs, fn {{:., [], [{:&, [], [0]}, field]}, _, []} ->
       if field == :id do
         item["id"]
@@ -63,12 +63,25 @@ defmodule JSONAPI.Ecto do
     end)
   end
 
-  defp extract_values(item, _included, field_names) do
-    # FIXME: remove hardcoded author_id
-    field_names = field_names -- [:id, :author_id]
+  defp extract_values({{_, schema}}, item, _included, field_names) do
+    fks = foreign_keys(schema)
+    field_names = field_names -- [:id | fks]
     values = Enum.map(field_names, fn field -> Map.fetch!(item["attributes"], Atom.to_string(field)) end)
-    # FIXME: remove [""]
-    [item["id"] | values] ++ [""]
+    [item["id"] | values] ++ Enum.map(fks, fn _ -> "" end)
+  end
+
+  defp foreign_keys(schema) do
+    fks =
+      schema.__schema__(:associations)
+      |> Enum.map(fn assoc ->
+        case schema.__schema__(:association, assoc) do
+          %Ecto.Association.BelongsTo{owner_key: fk} ->
+            fk
+          _ ->
+            nil
+        end
+      end)
+    fks -- [nil]
   end
 
   defp process_assocs(%{__struct__: struct} = schema, item, included) do
