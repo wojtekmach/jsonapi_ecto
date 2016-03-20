@@ -93,11 +93,16 @@ defmodule JSONAPI.Ecto do
           source = queryable.__schema__(:source)
           item = find_in(included, source, id)
 
-          attributes = extract_attributes(info.queryable, item)
-          attributes = Map.put(attributes, :id, id)
-          value = struct(queryable, attributes)
+          if item do
+            attributes = extract_attributes(info.queryable, item)
+            attributes = Map.put(attributes, :id, id)
+            value = struct(queryable, attributes)
 
-          {assoc, value}
+            {assoc, value}
+          else
+            # returns the default: Ecto.Association.NotLoaded
+            {assoc, Map.get(schema, assoc)}
+          end
         %Ecto.Association.Has{cardinality: :many} = info ->
           queryable = info.queryable
           ids = item["relationships"]["#{assoc}"]["data"] |> Enum.map(& &1["id"])
@@ -105,7 +110,11 @@ defmodule JSONAPI.Ecto do
           values =
             Enum.map(ids, fn id ->
               item = find_in(included, "#{assoc}", id)
-              struct(queryable, extract_attributes(info.queryable, item))
+              value =
+                struct(queryable, extract_attributes(info.queryable, item))
+                |> process_assocs(item, included)
+
+              value
             end)
 
           {assoc, values}

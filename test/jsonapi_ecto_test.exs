@@ -44,6 +44,9 @@ defmodule FakeClient do
       "first-name": "Dan",
       "last-name": "Gebhardt",
       "twitter": "dgeb"
+    },
+    "links": {
+      "self": "http://example.com/people/9"
     }
   }, {
     "type": "comments",
@@ -51,7 +54,11 @@ defmodule FakeClient do
     "attributes": {
       "body": "First!"
     },
-    "relationships": {},
+    "relationships": {
+      "author": {
+        "data": { "type": "people", "id": "2" }
+      }
+    },
     "links": {
       "self": "http://example.com/comments/5"
     }
@@ -61,7 +68,11 @@ defmodule FakeClient do
     "attributes": {
       "body": "I like XML better"
     },
-    "relationships": {},
+    "relationships": {
+      "author": {
+        "data": { "type": "people", "id": "9" }
+      }
+    },
     "links": {
       "self": "http://example.com/comments/12"
     }
@@ -88,6 +99,8 @@ defmodule Comment do
 
   schema "comments" do
     field :body, :string
+
+    belongs_to :author, Person
   end
 end
 
@@ -106,13 +119,21 @@ defmodule JSONAPI.EctoTest do
   import Ecto.Query
 
   test "works" do
-    articles =
+    [article] =
       from(a in Article)
       |> TestRepo.all(client: FakeClient)
 
-    author = %Person{id: "9", first_name: "Dan", last_name: "Gebhardt", twitter: "dgeb"}
-    comments = [%Comment{body: "First!"}, %Comment{body: "I like XML better"}]
-    assert [%Article{id: "1", title: "JSON API paints my bikeshed!", author: ^author, comments: ^comments}] = articles
+    # article
+    assert article.id == "1"
+    assert article.title == "JSON API paints my bikeshed!"
+    # author
+    assert %Person{id: "9", first_name: "Dan", last_name: "Gebhardt", twitter: "dgeb"} = article.author
+    # comments
+    [comment1,comment2] = article.comments
+    assert comment1.body == "First!"
+    assert %Ecto.Association.NotLoaded{} = comment1.author
+    assert comment2.body == "I like XML better"
+    assert %Person{id: "9", first_name: "Dan"} = comment2.author
   end
 
   test "select some fields" do
