@@ -80,7 +80,7 @@ defmodule JSONAPI.Ecto do
           source = queryable.__schema__(:source)
           item = find_in(included, source, id)
 
-          attributes = extract_attributes(item)
+          attributes = extract_attributes(info.queryable, item)
           attributes = Map.put(attributes, :id, id)
           value = struct(queryable, attributes)
 
@@ -92,7 +92,7 @@ defmodule JSONAPI.Ecto do
           values =
             Enum.map(ids, fn id ->
               item = find_in(included, "#{assoc}", id)
-              struct(queryable, extract_attributes(item))
+              struct(queryable, extract_attributes(info.queryable, item))
             end)
 
           {assoc, values}
@@ -107,9 +107,17 @@ defmodule JSONAPI.Ecto do
     Enum.find(included, fn item -> item["type"] == type && item["id"] == id end)
   end
 
-  defp extract_attributes(item) do
-    # TODO: whitelist attributes before String.to_atom
-    Enum.into(item["attributes"], %{}, fn {key, val} -> {String.replace(key, "-", "_") |> String.to_atom, val} end)
+  defp extract_attributes(queryable, item) do
+    fields = queryable.__schema__(:fields) |> Enum.map(&Atom.to_string/1)
+
+    Enum.into(item["attributes"], %{}, fn {key, val} ->
+      key = String.replace(key, "-", "_")
+      if key in fields do
+        {String.to_atom(key), val}
+      else
+        {nil, nil}
+      end
+    end)
   end
 
   ## Writes
